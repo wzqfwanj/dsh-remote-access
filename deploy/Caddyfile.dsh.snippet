@@ -1,25 +1,31 @@
 # ============================================================
 #  DSH Web GUI · 跳板机（Caddy）反代片段
 #  ------------------------------------------------------------
-#  拓扑：浏览器 → Caddy(HTTPS + Basic Auth) → 127.0.0.1:3080
-#        → 桌面本机 SSH 反向隧道 → 127.0.0.1:3080 上的 dsh web
+#  拓扑：浏览器 → Caddy(HTTPS + Basic Auth)
+#        → 127.0.0.1:3080（桌面机 SSH 反向隧道）
+#        → 桌面机 relay.py 中继 → 桌面 DSH 进程自己的 Web GUI
 #
 #  使用方法：
-#  1) 在跳板机生成密码哈希（把 用户名 和 密码 换成自己的）：
+#  1) 在跳板机生成密码哈希（把用户名和密码换成自己的）：
 #       caddy hash-password --plaintext '你的密码'
 #     输出形如 $2a$14$xxxxxxxx...
-#  2) 把下面两个站点块追加到 /etc/caddy/Caddyfile（或插入对应位置），
-#     把 dsh.example.com 换成你的域名，把 __BASIC_AUTH_HASH__ 换成上一步的哈希。
-#  3) 校验并热加载：
+#  2) 在桌面机运行 install.ps1 后，读取 runtime\relay-key.txt 得到中继密钥；
+#  3) 把下面站点块追加到 /etc/caddy/Caddyfile，替换：
+#       dsh.example.com      → 你的域名
+#       __BASIC_AUTH_HASH__  → 第 1 步的哈希
+#       __RELAY_KEY__        → 第 2 步的中继密钥
+#  4) 校验并热加载：
 #       caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
 #
 #  说明：
 #  - 两个入口指向同一个后端：独立子域名（443）+ 主域名 8443 备用入口。
 #  - 不要加 encode gzip：DSH 的流式响应（SSE/长连接）会被压缩缓冲拖慢；
 #    flush_interval -1 让 Caddy 不缓冲流式响应。
-#  - dsh web 启动时必须带 --public-url 和 --trusted-host，否则 /api 的
-#    Host 白名单会拒绝反代域名（表现为页面能开、功能全 403）。
-#  - SSH 反向隧道：桌面端执行
+#  - header_up X-Dsh-Relay-Key：本机中继会校验这个值，与桌面机
+#    runtime\relay-key.txt 不一致时中继返回 403。
+#  - 浏览器访问不需要 token：中继已用 DSH 持久签名密钥代签会话 Cookie，
+#    所以只要输入 Basic Auth 账号密码即可。
+#  - SSH 反向隧道：桌面机上的 scripts/start-tunnel.ps1 执行
 #      ssh -N -R 127.0.0.1:3080:127.0.0.1:3080 <跳板机>
 #    这样跳板机上的 127.0.0.1:3080 才会监听；否则访问返回 502。
 # ============================================================
@@ -30,6 +36,7 @@ dsh.example.com {
 		dsh __BASIC_AUTH_HASH__
 	}
 	reverse_proxy 127.0.0.1:3080 {
+		header_up X-Dsh-Relay-Key "__RELAY_KEY__"
 		flush_interval -1
 	}
 }
@@ -40,6 +47,7 @@ https://example.com:8443 {
 		dsh __BASIC_AUTH_HASH__
 	}
 	reverse_proxy 127.0.0.1:3080 {
+		header_up X-Dsh-Relay-Key "__RELAY_KEY__"
 		flush_interval -1
 	}
 }
