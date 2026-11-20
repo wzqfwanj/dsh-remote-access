@@ -27,8 +27,16 @@ Write-Host ("看护进程 watchdog             : {0} 个" -f $watchdogs.Count)
 Write-Host ("登录自启（启动文件夹）        : {0}" -f (Format-State (Test-Path -LiteralPath $startupVbs)))
 Write-Host ''
 if ($url) {
+    $url = $url.Trim()
     Write-Host '带 token 的登录链接（首次/换浏览器时打开，cookie 有效期 30 天）：'
     Write-Host "  $url"
+    # 同时写一个 .url 快捷方式，双击即可用默认浏览器打开（避免手抄长链接）
+    try {
+        $loginUrlFile = Join-Path $RuntimeDir 'login.url'
+        Set-Content -LiteralPath $loginUrlFile -Value @('[InternetShortcut]', "URL=$url") -Encoding ASCII
+        Write-Host "  （已生成可双击打开的快捷方式：$loginUrlFile）"
+    } catch { }
+    Write-Host '  复制/打开可运行：powershell -ExecutionPolicy Bypass -File scripts\open-url.ps1'
 } else {
     Write-Host "尚未记录登录链接：$RuntimeDir\web-url.txt 不存在（运行 start-dsh-web.ps1 后生成）"
 }

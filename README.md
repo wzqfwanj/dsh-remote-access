@@ -54,7 +54,8 @@ scripts/            PowerShell 脚本（服务/隧道/看护/安装/状态）
   watchdog.ps1       看护进程：断线重连（核心常驻进程）
   install.ps1        安装登录自启并立即启动
   uninstall.ps1      卸载自启并停止所有进程
-  status.ps1         查看当前状态、登录链接、凭据
+  status.ps1         查看当前状态、登录链接、凭据（并生成可双击的 login.url）
+  open-url.ps1       把当前 token 链接复制到剪贴板并用默认浏览器打开（避免手抄出错）
 deploy/
   Caddyfile.dsh.snippet  跳板机 Caddy 反代配置模板
   startup.vbs.template   登录自启启动器模板（由 install.ps1 生成）
@@ -105,6 +106,7 @@ caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
 ### 3. 使用
 
 1. 浏览器打开 `runtime/web-url.txt` 里的链接（形如 `https://dsh.example.com/?token=...`）。
+   也可以运行 `scripts\open-url.ps1`：它会自动把**完整链接**复制到剪贴板并用默认浏览器打开，避免手抄时多带 `\`、空格等字符导致 401。
 2. 输入跳板机 Caddy 配置的 Basic Auth 账号密码。
 3. 进入 DSH Web GUI，即可远程使用；之后 30 天内再访问 `https://dsh.example.com/` 无需再带 token。
 
@@ -138,7 +140,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File scripts\uninstall.ps1
 | --- | --- |
 | 浏览器 401（Basic Auth 弹窗反复） | 用户名/密码不对：重新 `caddy hash-password` 后更新 Caddyfile 并 reload |
 | 浏览器 502 | 隧道没建立：`ssh` 到跳板机执行 `ss -lnt \| grep 3080` 应为 `127.0.0.1:3080`；桌面运行 `start-tunnel.ps1`，看 `logs/tunnel.err.log` |
-| 页面 401 且提示 `dsh web authentication required` | 没带 token 且没有有效 Cookie：重新打开 `runtime/web-url.txt` 的链接（每次 dsh web 重启 token 会变，脚本会自动更新该文件） |
+| 页面 401 且提示 `dsh web authentication required` | 1）链接被多抄了字符：注意结尾不要带 `\`、空格或换行，`token` 只有 43 个字符；2）没带 token 且无有效 Cookie：重新打开 `runtime/web-url.txt` 的链接（每个 dsh web 进程的 token 不同，脚本会自动更新该文件）；3）最省事：运行 `scripts\open-url.ps1`（自动复制并打开） |
 | 页面能开但操作全部 403 / 报 Host 不匹配 | `dsh web` 启动时缺 `--trusted-host`：确认 `config.local.ps1` 的 `$TrustedHost` 与域名一致，重启服务 |
 | 链路恢复后仍打不开 | 等 watchdog 下一轮（约 20 秒）；或手动跑 `watchdog` 做的那两个脚本 |
 | 电脑休眠/关机 | 远程不可用（隧道在桌面机上）。需要远程常在线时请关闭睡眠，或使用带 UPS 的常开机器 |
