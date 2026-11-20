@@ -1,0 +1,45 @@
+# ============================================================
+#  DSH Web GUI · 跳板机（Caddy）反代片段
+#  ------------------------------------------------------------
+#  拓扑：浏览器 → Caddy(HTTPS + Basic Auth) → 127.0.0.1:3080
+#        → 桌面本机 SSH 反向隧道 → 127.0.0.1:3080 上的 dsh web
+#
+#  使用方法：
+#  1) 在跳板机生成密码哈希（把 用户名 和 密码 换成自己的）：
+#       caddy hash-password --plaintext '你的密码'
+#     输出形如 $2a$14$xxxxxxxx...
+#  2) 把下面两个站点块追加到 /etc/caddy/Caddyfile（或插入对应位置），
+#     把 dsh.example.com 换成你的域名，把 __BASIC_AUTH_HASH__ 换成上一步的哈希。
+#  3) 校验并热加载：
+#       caddy validate --config /etc/caddy/Caddyfile && systemctl reload caddy
+#
+#  说明：
+#  - 两个入口指向同一个后端：独立子域名（443）+ 主域名 8443 备用入口。
+#  - 不要加 encode gzip：DSH 的流式响应（SSE/长连接）会被压缩缓冲拖慢；
+#    flush_interval -1 让 Caddy 不缓冲流式响应。
+#  - dsh web 启动时必须带 --public-url 和 --trusted-host，否则 /api 的
+#    Host 白名单会拒绝反代域名（表现为页面能开、功能全 403）。
+#  - SSH 反向隧道：桌面端执行
+#      ssh -N -R 127.0.0.1:3080:127.0.0.1:3080 <跳板机>
+#    这样跳板机上的 127.0.0.1:3080 才会监听；否则访问返回 502。
+# ============================================================
+
+# ===== DSH Web GUI - 主入口（子域名） =====
+dsh.example.com {
+	basic_auth {
+		dsh __BASIC_AUTH_HASH__
+	}
+	reverse_proxy 127.0.0.1:3080 {
+		flush_interval -1
+	}
+}
+
+# ===== DSH Web GUI - 备用入口（主域名 8443，无需新增 DNS） =====
+https://example.com:8443 {
+	basic_auth {
+		dsh __BASIC_AUTH_HASH__
+	}
+	reverse_proxy 127.0.0.1:3080 {
+		flush_interval -1
+	}
+}

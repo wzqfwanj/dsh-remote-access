@@ -1,0 +1,11 @@
+# 运行时产物与本地部署信息，不入库
+logs/
+runtime/
+config.local.ps1
+
+# 编辑器/系统杂项
+*.bak
+*.old
+.vscode/
+.DS_Store
+Thumbs.db
